@@ -1,0 +1,78 @@
+# Ch2 "Writing messages to the log": workflow commands for notices, warnings, errors,
+# groups, masking, outputs, environment files and the job summary.
+name: 'Ch2 · Writing to the log'
+
+on:
+  workflow_dispatch:
+    inputs:
+      fail:
+        description: 'End with an error annotation and a failed step'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Annotations
+        run: |
+          echo "::notice title=Notice::Shown in the run summary"
+          echo "::warning file=src/lib/index.js,line=10,title=Warning::Annotations can point at a file and line"
+          echo "::debug::Only visible when debug logging is on (Ch2 'Enable debug logging')"
+
+      - name: Groups
+        run: |
+          echo "::group::Environment (collapsed)"
+          env | sort | grep -E '^(GITHUB|RUNNER)_' | grep -v TOKEN
+          echo "::endgroup::"
+
+      - name: Environment files
+        id: files
+        run: |
+          echo "BUILD_LABEL=lab-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"     # env var for later steps
+          echo "$HOME/.cookbook/bin" >> "$GITHUB_PATH"                   # PATH entry for later steps
+          echo "answer=42" >> "$GITHUB_OUTPUT"                           # step output
+          {
+            echo 'multiline<<EOF'
+            echo 'line one'
+            echo 'line two'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Read them back
+        run: |
+          echo "BUILD_LABEL=$BUILD_LABEL"
+          echo "PATH has: $(echo "$PATH" | tr ':' '\n' | grep cookbook)"
+          echo "answer=${{ steps.files.outputs.answer }}"
+          echo "multiline:"; echo "${{ steps.files.outputs.multiline }}"
+
+      - name: Stop and resume command processing
+        run: |
+          TOKEN=$(uuidgen)
+          echo "::stop-commands::$TOKEN"
+          echo "::warning::This line is printed, not turned into a warning"
+          echo "::$TOKEN::"
+          echo "::notice::Commands work again"
+
+      - name: Job summary
+        run: |
+          {
+            echo "## Log recipe"
+            echo "- [x] notice / warning / debug annotations"
+            echo "- [x] groups, GITHUB_ENV, GITHUB_PATH, GITHUB_OUTPUT"
+            echo ""
+            echo '```mermaid'
+            echo 'graph LR; step1[Annotations] --> step2[Groups] --> step3[Env files] --> step4[Summary]'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Error annotation
+        if: inputs.fail
+        run: |
+          echo "::error title=Requested failure::You asked this run to fail"
+          exit 1

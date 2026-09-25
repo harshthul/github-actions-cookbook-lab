@@ -1,0 +1,41 @@
+# Ch5 "Creating an Issue template": an issue form that drives the IssueOps workflow.
+name: Repository request
+description: Ask for a new repository (IssueOps demo - Chapter 5)
+title: '[Repo request]: '
+labels: ['repo-request']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill in the form. The **Ch5 · IssueOps** workflow validates it and comments with a plan.
+        The owner approves by commenting `/approve`.
+  - type: input
+    id: repo-name
+    attributes:
+      label: Repository name
+      description: 'Lowercase letters, digits and dashes, 3-40 characters'
+      placeholder: my-new-service
+    validations:
+      required: true
+  - type: dropdown
+    id: visibility
+    attributes:
+      label: Visibility
+      options: [private, public]
+      default: 0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      placeholder: What is this repository for?
+    validations:
+      required: true
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      options:
+        - label: I will add a README and a license within a week
+          required: true

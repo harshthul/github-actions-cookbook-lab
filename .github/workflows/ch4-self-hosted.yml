@@ -1,0 +1,27 @@
+# Ch4 "Setting up a self-hosted runner": runs on the Docker runner from runner/ on your PC.
+# Manual trigger ONLY: on a public repository never let pull requests from forks reach a
+# self-hosted runner (they could run any code on your machine).
+name: 'Ch4 · Self-hosted runner'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  on-my-machine:
+    runs-on: [self-hosted, linux, cookbook]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Where am I?
+        run: |
+          echo "Runner: ${{ runner.name }} (${{ runner.os }}/${{ runner.arch }})"
+          echo "Host:   $(hostname)  user: $(whoami)"
+          echo "Work:   $GITHUB_WORKSPACE"
+          echo "### Ran on self-hosted runner \`${{ runner.name }}\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Use the sample package
+        working-directory: src
+        run: |
+          if command -v node >/dev/null; then node lib/cli.js "self-hosted" --runtime; else echo "node not installed in the runner image"; fi

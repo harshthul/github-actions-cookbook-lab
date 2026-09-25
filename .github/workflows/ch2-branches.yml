@@ -1,0 +1,22 @@
+# Ch2 "Developing workflows in branches": a workflow file changed on a branch runs from that branch.
+# Try: git switch -c feature/try-ci ; edit this file ; git push -u origin feature/try-ci
+# Then: gh workflow run ch2-branches.yml --ref feature/try-ci
+name: 'Ch2 · Workflows in branches'
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  which-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Which version of the workflow ran?
+        run: |
+          echo "Ref:          ${{ github.ref_name }}"
+          echo "Workflow ref: ${{ github.workflow_ref }}"
+          echo "### Ran \`${{ github.workflow }}\` from \`${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,31 @@
+# Ch2 "Linting workflows": actionlint (with shellcheck) + yamllint on every change to workflows or actions.
+name: 'Ch2 · Lint workflows'
+
+on:
+  push:
+    paths: ['.github/**', 'actions/**/action.yml', '.yamllint.yml']
+  pull_request:
+    paths: ['.github/**', 'actions/**/action.yml', '.yamllint.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: actionlint
+        run: |
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          # -format adds GitHub annotations on the offending lines (single quotes are intended)
+          # shellcheck disable=SC2016
+          ./actionlint -color -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}%0A```%0A{{replace $err.Snippet "\\n" "%0A"}}%0A```\n{{end}}'
+
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: yamllint
+        run: yamllint --format github .github actions

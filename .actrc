@@ -1,0 +1,3 @@
+# act (run workflows locally, Ch2): medium Ubuntu image, x64 on any host
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+--container-architecture linux/amd64

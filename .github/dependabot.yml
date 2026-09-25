@@ -1,0 +1,17 @@
+# Ch7 "Automate the update of your dependencies"
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ['/', '/actions/composite-node']
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ['*'] }
+  - package-ecosystem: npm
+    directories: ['/src', '/app', '/actions/ts-greeting']
+    schedule: { interval: weekly }
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directories: ['/app', '/runner', '/actions/docker-greeting']
+    schedule: { interval: weekly }

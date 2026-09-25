@@ -1,0 +1,42 @@
+# Ch5 "Reusable workflows and composite actions": a workflow other workflows call with 'uses:'.
+name: 'Ch5 · Reusable workflow'
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version'
+        type: string
+        default: '22'
+      working-directory:
+        type: string
+        default: 'src'
+    secrets:
+      greeting-secret:
+        description: 'Optional secret passed by the caller'
+        required: false
+    outputs:
+      result:
+        description: 'Result line from the job'
+        value: ${{ jobs.test.outputs.result }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.result.outputs.result }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: node
+        uses: ./actions/composite-node
+        with:
+          node-version: ${{ inputs.node-version }}
+          working-directory: ${{ inputs.working-directory }}
+      - id: result
+        env:
+          HAS_SECRET: ${{ secrets.greeting-secret != '' }}
+        run: |
+          echo "result=Node ${{ steps.node.outputs.node-version }} passed (secret passed: $HAS_SECRET)" >> "$GITHUB_OUTPUT"

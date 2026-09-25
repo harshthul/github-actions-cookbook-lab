@@ -1,0 +1,43 @@
+# Ch7 "Automate the update of your dependencies": Dependabot opens PRs (see .github/dependabot.yml);
+# this workflow approves and enables auto-merge for patch and minor updates.
+# Auto-merge waits for the required check from the 'main-checks' ruleset (CodeQL), which
+# scripts/Setup-Lab.ps1 creates together with "Allow auto-merge". Without a required check,
+# 'gh pr merge --auto' would merge at once.
+# Note: a merge done with GITHUB_TOKEN does not trigger 'push' workflows on main.
+name: 'Ch7 · Dependabot auto-merge'
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v3
+      - name: Approve and enable auto-merge for patch/minor
+        # ts-greeting updates need dist/ rebuilt (npm run build) - a human handles those
+        if: >-
+          steps.meta.outputs.update-type != 'version-update:semver-major' &&
+          steps.meta.outputs.directory != '/actions/ts-greeting'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr review --approve "$PR" || true   # approving your own repo's PR may be disallowed; merge still works
+          gh pr merge --auto --squash "$PR"
+      - name: Major updates and TypeScript action updates need a human
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-major' ||
+          steps.meta.outputs.directory == '/actions/ts-greeting'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.html_url }}
+          DEPS: ${{ steps.meta.outputs.dependency-names }}
+        run: gh pr comment "$PR" --body "Manual review needed for $DEPS (major update, or actions/ts-greeting where dist/ must be rebuilt with npm run build)."

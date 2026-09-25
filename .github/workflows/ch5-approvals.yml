@@ -1,0 +1,28 @@
+# Ch5 "Using environments for approvals and checks": the 'approval' environment has you as required
+# reviewer, a wait timer and a branch policy (scripts/Setup-Lab.ps1 configures it).
+name: 'Ch5 · Environment approvals'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Pre-deployment checks
+        working-directory: src
+        run: npm test
+
+  release:
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: approval       # the run pauses here until you click "Approve and deploy"
+    steps:
+      - name: Approved
+        run: |
+          echo "Approved and released at $(date -u)"
+          echo "### :rocket: Released after approval" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,4 @@
+# actionlint: labels of our self-hosted runner (runner/)
+self-hosted-runner:
+  labels:
+    - cookbook

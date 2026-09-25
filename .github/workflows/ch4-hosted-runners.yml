@@ -1,0 +1,27 @@
+# Ch4 "GitHub hosted runners": the same job on Linux (x64 + Arm), Windows and macOS.
+# Standard hosted runners are free for public repositories.
+name: 'Ch4 · GitHub-hosted runners'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runner-info:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Describe the runner
+        shell: bash
+        run: |
+          echo "label:  ${{ matrix.os }}"
+          echo "os:     ${{ runner.os }} / ${{ runner.arch }}"
+          echo "name:   ${{ runner.name }}"
+          echo "cores:  $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "$NUMBER_OF_PROCESSORS")"
+          echo "tools:  node $(node --version), git $(git --version | cut -d' ' -f3), docker $(docker --version 2>/dev/null | cut -d' ' -f3 || echo n/a)"
+          echo "| ${{ matrix.os }} | ${{ runner.os }} | ${{ runner.arch }} | $(node --version) |" >> "$GITHUB_STEP_SUMMARY"

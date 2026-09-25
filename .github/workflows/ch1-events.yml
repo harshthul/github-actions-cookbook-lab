@@ -1,0 +1,35 @@
+# Ch1 "The GitHub ecosystem": different events trigger workflows (issues, comments, schedule, manual).
+name: 'Ch1 · Events'
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC (off the hour to avoid the rush)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  describe:
+    runs-on: ubuntu-latest
+    # skip comments on pull requests - issue_comment fires for both
+    if: github.event_name != 'issue_comment' || !github.event.issue.pull_request
+    steps:
+      - name: What happened
+        env:
+          ACTION: ${{ github.event.action }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}   # untrusted input: use env, never ${{ }} inside run
+          COMMENT: ${{ github.event.comment.body }}
+        run: |
+          echo "Event: ${{ github.event_name }} ${ACTION:+($ACTION)}"
+          case "${{ github.event_name }}" in
+            issues)        echo "Issue #${{ github.event.issue.number }}: $ISSUE_TITLE" ;;
+            issue_comment) echo "Comment on #${{ github.event.issue.number }}: ${COMMENT:0:80}" ;;
+            schedule)      echo "Scheduled run (cron '${{ github.event.schedule }}')" ;;
+            *)             echo "Manual run by ${{ github.actor }}" ;;
+          esac
+          echo "### Event: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"

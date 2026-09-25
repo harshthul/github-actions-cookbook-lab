@@ -1,0 +1,28 @@
+# Ch5: calls the reusable workflow for several Node versions and reads its outputs.
+name: 'Ch5 · Call a reusable workflow'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node20:
+    uses: ./.github/workflows/ch5-reusable.yml
+    with:
+      node-version: '20'
+  node24:
+    uses: ./.github/workflows/ch5-reusable.yml
+    with:
+      node-version: '24'
+    secrets:
+      greeting-secret: ${{ secrets.COOKBOOK_SECRET }}
+
+  report:
+    needs: [node20, node24]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "- ${{ needs.node20.outputs.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ${{ needs.node24.outputs.result }}" >> "$GITHUB_STEP_SUMMARY"

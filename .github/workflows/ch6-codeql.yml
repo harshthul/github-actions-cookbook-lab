@@ -1,0 +1,42 @@
+# Ch6 "Find security vulnerabilities with CodeQL" (free for public repositories).
+# Results: Security > Code scanning.
+name: 'Ch6 · CodeQL'
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'actions/**', 'app/**', '.github/workflows/**']
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '41 5 * * 3'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]   # 'actions' scans the workflows themselves
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+          config: |
+            paths-ignore:
+              - actions/ts-greeting/dist
+              - '**/node_modules'
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'

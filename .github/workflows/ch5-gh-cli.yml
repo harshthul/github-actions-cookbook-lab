@@ -1,0 +1,54 @@
+# Ch5 "Using the GitHub CLI and the GITHUB_TOKEN to access resources": least-privilege permissions,
+# gh commands for triage and a weekly report issue.
+name: 'Ch5 · GitHub CLI + GITHUB_TOKEN'
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'What to do'
+        type: choice
+        options: [triage, report]
+        default: triage
+  schedule:
+    - cron: '23 7 * * 1'   # weekly report, Mondays 07:23 UTC
+
+permissions:
+  contents: read
+  issues: write          # the only write permission this workflow needs
+
+jobs:
+  gh:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TASK: ${{ inputs.task || 'report' }}
+    steps:
+      - name: What can this token do?
+        run: |
+          echo "Token permissions come from the 'permissions:' block above."
+          gh api "repos/$GH_REPO" --jq '"repo: \(.full_name)  visibility: \(.visibility)"'
+
+      - name: Triage - label issues that have no label
+        if: env.TASK == 'triage'
+        run: |
+          gh label create triage --color FBCA04 --description "Needs a first look" 2>/dev/null || true
+          numbers=$(gh issue list --state open --search "no:label" --json number --jq '.[].number')
+          if [ -z "$numbers" ]; then echo "Nothing to triage"; exit 0; fi
+          for n in $numbers; do
+            gh issue edit "$n" --add-label triage
+            echo "labelled #$n"
+          done
+          echo "Labelled: $(echo "$numbers" | xargs)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report - open a weekly status issue
+        if: env.TASK == 'report'
+        run: |
+          since=$(date -u -d '7 days ago' +%Y-%m-%d)
+          opened=$(gh issue list --state all --search "created:>=$since" --json number --jq length)
+          closed=$(gh issue list --state closed --search "closed:>=$since" --json number --jq length)
+          runs=$(gh run list --created ">=$since" --limit 200 --json conclusion --jq '[.[] | select(.conclusion=="success")] | length')
+          body=$(printf '| Since %s | |\n|---|---|\n| Issues opened | %s |\n| Issues closed | %s |\n| Successful workflow runs | %s |\n' "$since" "$opened" "$closed" "$runs")
+          gh issue create --title "Weekly report $(date -u +%Y-%m-%d)" --body "$body"
+          echo "$body" >> "$GITHUB_STEP_SUMMARY"

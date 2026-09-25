@@ -1,0 +1,41 @@
+name: 'Cookbook composite: set up Node and test'
+description: 'Ch3/Ch5 recipe: a composite action that bundles setup-node, npm install and npm test into one reusable step.'
+author: 'GitHub Actions Cookbook lab'
+branding:
+  icon: 'layers'
+  color: 'green'
+inputs:
+  node-version:
+    description: 'Node.js version'
+    required: false
+    default: '22'
+  working-directory:
+    description: 'Folder with package.json'
+    required: false
+    default: '.'
+outputs:
+  node-version:
+    description: 'The exact Node.js version that was installed'
+    value: ${{ steps.node.outputs.node-version }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js ${{ inputs.node-version }}
+      id: node
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+    - name: Install
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+    - name: Test
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npm test
+    - name: Summary
+      shell: bash
+      run: |
+        echo "### Composite action" >> "$GITHUB_STEP_SUMMARY"
+        echo "Tested \`${{ inputs.working-directory }}\` on Node ${{ steps.node.outputs.node-version }}" >> "$GITHUB_STEP_SUMMARY"

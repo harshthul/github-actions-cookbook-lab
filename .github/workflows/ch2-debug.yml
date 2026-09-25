@@ -1,0 +1,37 @@
+# Ch2 "Enable debug logging": runner.debug, ::debug:: lines and ACTIONS_STEP_DEBUG / ACTIONS_RUNNER_DEBUG.
+# Turn it on per run with "Re-run jobs > Enable debug logging", or for every run with the
+# repository variables ACTIONS_STEP_DEBUG=true and ACTIONS_RUNNER_DEBUG=true.
+name: 'Ch2 · Debug logging'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is debug on?
+        run: |
+          if [ "${{ runner.debug }}" = "1" ]; then
+            echo "::notice::Debug logging is ON for this run"
+          else
+            echo "Debug logging is off. Re-run this job with 'Enable debug logging' ticked."
+          fi
+          echo "::debug::This line only appears in debug mode"
+
+      - name: Extra diagnostics only in debug mode
+        if: runner.debug == '1'
+        run: |
+          echo "::group::Runner diagnostics"
+          uname -a; df -h /; free -m; nproc
+          echo "::endgroup::"
+
+      - name: Actions also log more
+        uses: actions/github-script@v9
+        with:
+          script: |
+            core.debug('core.debug() from github-script');
+            core.info(`isDebug: ${core.isDebug()}`);

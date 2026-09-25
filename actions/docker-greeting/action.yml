@@ -1,0 +1,19 @@
+name: 'Cookbook Docker greeting'
+description: 'Ch3 recipe: a Docker container action with inputs, outputs and a job summary.'
+author: 'GitHub Actions Cookbook lab'
+branding:
+  icon: 'box'
+  color: 'blue'
+inputs:
+  who-to-greet:
+    description: 'Who to greet'
+    required: true
+    default: 'World'
+outputs:
+  time:
+    description: 'When the greeting happened (UTC, ISO 8601)'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.who-to-greet }}

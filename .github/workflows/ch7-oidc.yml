@@ -1,0 +1,33 @@
+# Ch7 "Using OIDC to securely deploy to any cloud" - the free part: request the workflow's OIDC
+# token and show the claims a cloud provider (Azure/AWS/GCP) would trust. No cloud account needed.
+# The token itself is never printed. The cloud logins that use it are in later/.
+name: 'Ch7 · OIDC token claims'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write      # required to request the OIDC token
+
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    environment: staging   # the environment becomes part of the 'sub' claim
+    steps:
+      - name: Request the token and decode its claims
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const token = await core.getIDToken('api://AzureADTokenExchange');
+            const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+            const keep = ['iss', 'aud', 'sub', 'repository', 'repository_owner', 'ref', 'environment',
+                          'workflow_ref', 'job_workflow_ref', 'event_name', 'runner_environment'];
+            const rows = keep.filter(k => claims[k] !== undefined).map(k => [k, String(claims[k])]);
+            const ttl = claims.exp - claims.iat;
+            await core.summary
+              .addHeading('OIDC token claims', 3)
+              .addTable([[{ data: 'Claim', header: true }, { data: 'Value', header: true }], ...rows])
+              .addRaw(`Token lifetime: ${ttl / 60} minutes. A cloud "federated credential" matches on iss + sub + aud.`)
+              .write();
+            core.info(`sub = ${claims.sub}`);

@@ -1,0 +1,16 @@
+extends: default
+rules:
+  line-length: disable
+  document-start: disable
+  truthy:
+    allowed-values: ['true', 'false', 'on']
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+ignore: |
+  node_modules/
+  actions/ts-greeting/dist/

@@ -1,0 +1,15 @@
+# Ch4 self-hosted runners on Docker Desktop (values come from runner/.env, git-ignored).
+#   .\Start-Runner.ps1              -> 1 ephemeral runner
+#   .\Start-Runner.ps1 -Count 3     -> scale out: 3 ephemeral runners take jobs in parallel
+#   .\Start-Runner.ps1 -Stop        -> stop and unregister
+name: gha-runner
+
+services:
+  runner:
+    build: .
+    image: cookbook-gha-runner:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RUNNER_LABELS: cookbook
+# No docker.sock mount on purpose: jobs cannot control Docker on your PC.

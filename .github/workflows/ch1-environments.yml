@@ -1,0 +1,31 @@
+# Ch1 "Creating and using environments": per-environment variables and secrets, deployment URLs
+# and a deployment history. Environments are created by scripts/Setup-Lab.ps1.
+name: 'Ch1 · Environments'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ github.server_url }}/${{ github.repository }}/deployments
+    steps:
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to ${{ vars.ENV_LABEL || 'staging' }}"
+          echo "Environment variable ENV_LABEL = '${{ vars.ENV_LABEL }}' (set per environment)"
+
+  production:
+    needs: staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ github.server_url }}/${{ github.repository }}/deployments
+    steps:
+      - name: Deploy to production
+        run: echo "Deploying to ${{ vars.ENV_LABEL || 'production' }} after staging succeeded"

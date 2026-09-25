@@ -1,0 +1,152 @@
+# Ch6 "Versioning your packages" + "Creating a Release and publishing the package"
+# + "Generating and using SBOMs".
+# Start it with a bump (patch/minor/major): it computes the next SemVer from the latest v* tag,
+# tags the commit, builds and tests, creates an SBOM and build-provenance attestations,
+# publishes to GitHub Packages (npm) and creates a GitHub release with the assets.
+name: 'Ch6 · Release'
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump'
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # push the tag
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0       # all tags
+      - name: Next version
+        id: next
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          last=${last:-v0.0.0}
+          IFS=. read -r major minor patch <<< "${last#v}"
+          case "$BUMP" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            *)     patch=$((patch + 1)) ;;
+          esac
+          version="$major.$minor.$patch"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "### $last -> v$version ($BUMP)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Tag the commit
+        env:
+          TAG: ${{ steps.next.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+  release:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # create the release
+      packages: write          # publish to GitHub Packages
+      id-token: write          # sign attestations
+      attestations: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: '@${{ github.repository_owner }}'
+      - name: Set version and package name
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"             # npm scopes are lowercase
+          npm pkg set "name=@${owner}/cookbook-greeter" "version=${VERSION}" \
+                      "repository.url=git+https://github.com/${GITHUB_REPOSITORY}.git" \
+                      "publishConfig.registry=https://npm.pkg.github.com"
+          npm pkg get name version
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Pack
+        id: pack
+        run: |
+          file=$(npm pack --silent | tail -n1)
+          echo "file=src/$file" >> "$GITHUB_OUTPUT"
+
+      - name: SBOM (SPDX) with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          path: src
+          format: spdx-json
+          output-file: src/sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: GitHub dependency-graph SBOM
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # the API wraps the SPDX document as {"sbom": {...}}; on errors gh prints the error JSON, so drop the file
+          if ! gh api "repos/${GITHUB_REPOSITORY}/dependency-graph/sbom" --jq .sbom > github-sbom.spdx.json; then
+            rm -f github-sbom.spdx.json
+            echo "::warning::dependency graph SBOM not available (enable Dependency graph in Settings)"
+          fi
+
+      - name: Build provenance attestation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ steps.pack.outputs.file }}
+      - name: SBOM attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ steps.pack.outputs.file }}
+          sbom-path: src/sbom.spdx.json
+
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: npm publish "$(basename "${{ steps.pack.outputs.file }}")"
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
+        run: |
+          assets=("$(basename "${{ steps.pack.outputs.file }}")" sbom.spdx.json dist/build-info.json)
+          [ -s github-sbom.spdx.json ] && assets+=(github-sbom.spdx.json)
+          # shellcheck disable=SC2086
+          gh release create "$TAG" "${assets[@]}" --title "cookbook-greeter $TAG" --generate-notes $PRERELEASE
+          {
+            echo "### :package: Released $TAG"
+            echo "- Release: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/$TAG"
+            echo "- Package: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY_OWNER}?tab=packages"
+            echo "- Verify: \`gh attestation verify $(basename "${{ steps.pack.outputs.file }}") -R ${GITHUB_REPOSITORY}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

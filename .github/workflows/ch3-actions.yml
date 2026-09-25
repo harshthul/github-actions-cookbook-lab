@@ -1,0 +1,83 @@
+# Ch3 "Building GitHub Actions": use the three local actions (Docker, TypeScript, composite),
+# read their outputs, and check the TypeScript bundle in dist/ matches the source (best practice).
+name: 'Ch3 · Custom actions'
+
+on:
+  push:
+    branches: [main]
+    paths: ['actions/**', '.github/workflows/ch3-actions.yml']
+  pull_request:
+    paths: ['actions/**', '.github/workflows/ch3-actions.yml']
+  workflow_dispatch:
+    inputs:
+      who:
+        description: 'Who to greet'
+        default: 'Cookbook reader'
+
+permissions:
+  contents: read
+
+jobs:
+  docker-action:
+    runs-on: ubuntu-latest        # Docker container actions need a Linux runner
+    steps:
+      - uses: actions/checkout@v7
+      - id: greet
+        uses: ./actions/docker-greeting
+        with:
+          who-to-greet: ${{ inputs.who || 'Docker' }}
+      - run: echo "The Docker action greeted at ${{ steps.greet.outputs.time }}"
+
+  typescript-action:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]   # JavaScript actions run on every OS
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: greet
+        uses: ./actions/ts-greeting
+        with:
+          who-to-greet: ${{ inputs.who || 'TypeScript' }}
+          style: emoji
+      - run: echo "$GREETING ($TIME)"
+        shell: bash
+        env:
+          GREETING: ${{ steps.greet.outputs.greeting }}   # contains user input: pass via env
+          TIME: ${{ steps.greet.outputs.time }}
+
+  composite-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: node
+        uses: ./actions/composite-node
+        with:
+          node-version: '22'
+          working-directory: src
+      - run: echo "Composite action installed ${{ steps.node.outputs.node-version }}"
+
+  ts-action-check:
+    name: TypeScript action - test and dist up to date
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: actions/ts-greeting
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: actions/ts-greeting/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: dist/ must be committed and current
+        run: |
+          if [ -n "$(git status --porcelain dist)" ]; then
+            echo "::error::dist/ is out of date - run 'npm run build' in actions/ts-greeting and commit dist/"
+            git diff --stat dist
+            exit 1
+          fi
+          echo "dist/ is up to date"

@@ -1,0 +1,23 @@
+name: 'Cookbook TypeScript greeting'
+description: 'Ch3 recipe: a JavaScript/TypeScript action with inputs, outputs, annotations and a job summary.'
+author: 'GitHub Actions Cookbook lab'
+branding:
+  icon: 'message-circle'
+  color: 'purple'
+inputs:
+  who-to-greet:
+    description: 'Who to greet'
+    required: true
+    default: 'World'
+  style:
+    description: 'plain | shout | emoji'
+    required: false
+    default: 'plain'
+outputs:
+  greeting:
+    description: 'The greeting text'
+  time:
+    description: 'When the greeting happened (UTC, ISO 8601)'
+runs:
+  using: 'node24'
+  main: 'dist/index.js'

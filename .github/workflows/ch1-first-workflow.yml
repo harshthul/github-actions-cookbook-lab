@@ -1,0 +1,72 @@
+# Ch1 "Using the workflow editor for writing workflows": events, inputs, contexts, expressions.
+name: 'Ch1 · First workflow'
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/ch1-first-workflow.yml']
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Who to greet'
+        required: true
+        default: 'Octocat'
+        type: string
+      mood:
+        description: 'Mood'
+        type: choice
+        options: [happy, curious, sleepy]
+        default: happy
+      verbose:
+        description: 'Print the whole event payload'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  greet:
+    runs-on: ubuntu-latest
+    env:
+      # inputs are empty on push, so fall back with ||
+      WHO: ${{ inputs.name || github.actor }}
+      MOOD: ${{ inputs.mood || 'happy' }}
+    steps:
+      - name: Say hello
+        run: echo "Hello $WHO, you look $MOOD today!"
+
+      - name: Contexts
+        run: |
+          echo "event:      ${{ github.event_name }}"
+          echo "ref:        ${{ github.ref }} (${{ github.ref_type }})"
+          echo "sha:        ${{ github.sha }}"
+          echo "repository: ${{ github.repository }}"
+          echo "run:        ${{ github.run_id }} attempt ${{ github.run_attempt }}"
+          echo "runner:     ${{ runner.os }} / ${{ runner.arch }}"
+
+      - name: Expressions
+        env:
+          SENTENCE: ${{ format('{0} is {1}', env.WHO, env.MOOD) }}   # built from inputs: pass via env
+        run: |
+          echo "format():     $SENTENCE"
+          echo "contains():   ${{ contains(github.ref, 'main') }}"
+          echo "startsWith(): ${{ startsWith(github.event_name, 'workflow') }}"
+          echo "ternary:      ${{ github.event_name == 'push' && 'pushed' || 'started by hand' }}"
+
+      - name: Only when started by hand
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "Started from the Actions tab or 'gh workflow run'"
+
+      - name: Event payload
+        if: inputs.verbose
+        env:
+          EVENT: ${{ toJSON(github.event) }}
+        run: echo "$EVENT"
+
+      - name: Job summary
+        run: |
+          {
+            echo "### :wave: Hello $WHO"
+            echo "Mood: **$MOOD** · event: \`${{ github.event_name }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

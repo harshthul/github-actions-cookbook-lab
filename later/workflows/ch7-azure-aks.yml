@@ -1,0 +1,36 @@
+# LATER - Ch7 "Release the container application to Azure Kubernetes Service (AKS)" with OIDC.
+# To enable: copy to .github/workflows/, create the Azure resources (later/README.md) and set the
+# repository variables AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, AKS_RESOURCE_GROUP, AKS_CLUSTER.
+name: 'Ch7 · Deploy to Azure AKS (later)'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/cookbook-app:latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Azure login (OIDC, no secret)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ vars.AKS_CLUSTER }}
+      - name: Deploy
+        run: |
+          IMAGE="${IMAGE,,}"
+          sed "s|IMAGE_PLACEHOLDER|$IMAGE|" later/k8s/deployment.yml | kubectl apply -f -
+          kubectl rollout status deployment/cookbook-app --timeout=180s
+          kubectl get service cookbook-app -o wide

@@ -1,0 +1,34 @@
+# Ch6 "Use caching in workflows": actions/cache with a key, restore-keys and the cache-hit output.
+# Run it twice: the second run restores the cache and skips the slow step.
+name: 'Ch6 · Caching'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Restore cache
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/cookbook
+          key: cookbook-${{ runner.os }}-${{ hashFiles('src/package-lock.json') }}
+          restore-keys: |
+            cookbook-${{ runner.os }}-
+      - name: Slow step (only on a cache miss)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/cookbook
+          sleep 20   # stands in for an expensive download or build
+          date -u > ~/.cache/cookbook/created-at.txt
+      - name: Use the cache
+        run: |
+          echo "cache-hit=${{ steps.cache.outputs.cache-hit }}"
+          echo "cache created: $(cat ~/.cache/cookbook/created-at.txt)"
+          echo "### cache-hit: \`${{ steps.cache.outputs.cache-hit || 'false' }}\`" >> "$GITHUB_STEP_SUMMARY"

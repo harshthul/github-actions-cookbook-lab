@@ -1,0 +1,8 @@
+node_modules/
+runner/.env
+*.tgz
+src/dist/
+src/test-results.xml
+actions/ts-greeting/lib/
+.secrets
+.env

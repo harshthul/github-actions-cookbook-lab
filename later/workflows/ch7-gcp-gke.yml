@@ -1,0 +1,34 @@
+# LATER - Ch7 deploy to Google Kubernetes Engine (GKE) with Workload Identity Federation (OIDC).
+# To enable: copy to .github/workflows/, create the workload identity pool/provider (later/README.md)
+# and set variables GCP_WIF_PROVIDER, GCP_SERVICE_ACCOUNT, GKE_CLUSTER, GKE_LOCATION.
+name: 'Ch7 · Deploy to Google GKE (later)'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/cookbook-app:latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Google login (OIDC, no key file)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GKE_LOCATION }}
+      - name: Deploy
+        run: |
+          IMAGE="${IMAGE,,}"
+          sed "s|IMAGE_PLACEHOLDER|$IMAGE|" later/k8s/deployment.yml | kubectl apply -f -
+          kubectl rollout status deployment/cookbook-app --timeout=180s

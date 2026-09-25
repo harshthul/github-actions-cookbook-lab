@@ -1,0 +1,62 @@
+# Ch7 "Environment approval checks": deploy the GHCR image to 'staging' automatically, then to
+# 'production' after your approval. The "deployment" runs the container on the runner and smoke-tests
+# it, so the flow is real without a cloud account (later/ has AKS, ECS and GKE versions).
+name: 'Ch7 · Deploy with approvals'
+
+on:
+  workflow_run:
+    workflows: ['Ch7 · Container to GHCR']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  staging:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ steps.smoke.outputs.url }}
+    steps:
+      - name: Run and smoke-test the image
+        id: smoke
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENV_NAME: staging
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cookbook-app:latest"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker run -d --name app -p 8080:8080 "$image"
+          for _ in $(seq 1 20); do curl -fsS http://localhost:8080/healthz && break; sleep 1; done
+          curl -fsS http://localhost:8080/version | tee version.json
+          echo
+          echo "url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pkgs/container/cookbook-app" >> "$GITHUB_OUTPUT"
+          echo "### $ENV_NAME: deployed \`$image\` - $(cat version.json)" >> "$GITHUB_STEP_SUMMARY"
+          docker rm -f app
+
+  production:
+    needs: staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production           # required reviewer = you (scripts/Setup-Lab.ps1)
+      url: ${{ steps.smoke.outputs.url }}
+    steps:
+      - name: Run and smoke-test the image
+        id: smoke
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENV_NAME: production
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cookbook-app:latest"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker run -d --name app -p 8080:8080 "$image"
+          for _ in $(seq 1 20); do curl -fsS http://localhost:8080/healthz && break; sleep 1; done
+          curl -fsS http://localhost:8080/version | tee version.json
+          echo
+          echo "url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pkgs/container/cookbook-app" >> "$GITHUB_OUTPUT"
+          echo "### $ENV_NAME: deployed \`$image\` - $(cat version.json)" >> "$GITHUB_STEP_SUMMARY"
+          docker rm -f app

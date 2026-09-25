@@ -1,0 +1,99 @@
+# Ch5 IssueOps: an issue form (repo-request) -> validate -> comment a plan -> owner comments /approve
+# -> create the repository -> close the issue.
+# GITHUB_TOKEN cannot create repositories. Without the secret REPO_ADMIN_TOKEN the workflow runs in
+# DRY-RUN mode (everything except the final "gh repo create"). See README "IssueOps".
+name: 'Ch5 · IssueOps'
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: issue-ops-${{ github.event.issue.number }}
+
+jobs:
+  parse:
+    if: contains(github.event.issue.labels.*.name, 'repo-request') && !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    outputs:
+      valid: ${{ steps.parse.outputs.valid }}
+      name: ${{ steps.parse.outputs.name }}
+      visibility: ${{ steps.parse.outputs.visibility }}
+      description: ${{ steps.parse.outputs.description }}
+    steps:
+      - name: Parse the issue form
+        id: parse
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // Issue forms render as "### Label\n\nvalue" blocks
+            const body = context.payload.issue.body || '';
+            const field = (label) => {
+              const m = body.match(new RegExp(`### ${label}\\s+([\\s\\S]*?)(?=\\n### |$)`));
+              const v = m ? m[1].trim() : '';
+              return v === '_No response_' ? '' : v;
+            };
+            const name = field('Repository name');
+            const visibility = field('Visibility') || 'private';
+            const description = field('Description').split('\n')[0].slice(0, 200);
+            const errors = [];
+            if (!/^[a-z0-9](?:[a-z0-9-]{1,38})[a-z0-9]$/.test(name)) errors.push(`\`${name || '(empty)'}\` is not a valid name (lowercase, digits, dashes, 3-40 chars)`);
+            if (!['private', 'public'].includes(visibility)) errors.push(`unknown visibility \`${visibility}\``);
+            if (!description) errors.push('description is empty');
+            core.setOutput('valid', errors.length === 0);
+            core.setOutput('name', name);
+            core.setOutput('visibility', visibility);
+            core.setOutput('description', description);
+            core.setOutput('errors', errors.join('\n'));
+            if (context.eventName === 'issues') {
+              const text = errors.length
+                ? `### :x: Request needs changes\n${errors.map(e => `- ${e}`).join('\n')}\n\nEdit the issue to try again.`
+                : `### :clipboard: Plan\n| | |\n|---|---|\n| Repository | \`${context.repo.owner}/${name}\` |\n| Visibility | ${visibility} |\n| Description | ${description} |\n\nThe owner can comment \`/approve\` to create it.`;
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body: text });
+              await github.rest.issues.addLabels({ ...context.repo, issue_number: context.issue.number,
+                labels: [errors.length ? 'needs-changes' : 'ready'] });
+              if (!errors.length) {
+                try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: context.issue.number, name: 'needs-changes' }); } catch {}
+              }
+            }
+
+  approve:
+    needs: parse
+    # only a comment "/approve" from the repository owner, on a valid request
+    if: >-
+      github.event_name == 'issue_comment' &&
+      startsWith(github.event.comment.body, '/approve') &&
+      github.event.comment.user.login == github.repository_owner &&
+      needs.parse.outputs.valid == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NAME: ${{ needs.parse.outputs.name }}
+      VISIBILITY: ${{ needs.parse.outputs.visibility }}
+      DESCRIPTION: ${{ needs.parse.outputs.description }}
+      ISSUE: ${{ github.event.issue.number }}
+      HAS_ADMIN_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN != '' }}
+    steps:
+      - name: Create the repository
+        env:
+          ADMIN_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
+        run: |
+          if [ "$HAS_ADMIN_TOKEN" = "true" ]; then
+            GH_TOKEN="$ADMIN_TOKEN" gh repo create "${{ github.repository_owner }}/$NAME" \
+              "--$VISIBILITY" --description "$DESCRIPTION" --add-readme
+            echo "RESULT=created https://github.com/${{ github.repository_owner }}/$NAME" >> "$GITHUB_ENV"
+          else
+            echo "::notice::DRY RUN - add the secret REPO_ADMIN_TOKEN to really create repositories"
+            echo "RESULT=dry run: would create ${{ github.repository_owner }}/$NAME ($VISIBILITY)" >> "$GITHUB_ENV"
+          fi
+      - name: Report and close
+        run: |
+          gh issue comment "$ISSUE" -R "$GITHUB_REPOSITORY" --body ":white_check_mark: Approved by @${{ github.event.comment.user.login }} - $RESULT"
+          gh issue edit "$ISSUE" -R "$GITHUB_REPOSITORY" --add-label approved
+          gh issue close "$ISSUE" -R "$GITHUB_REPOSITORY" --reason completed

@@ -1,0 +1,41 @@
+# LATER - Ch7 deploy to AWS Elastic Container Service (ECS) with OIDC.
+# To enable: copy to .github/workflows/, create the IAM role trusting token.actions.githubusercontent.com
+# (later/README.md) and set variables AWS_ROLE_ARN, AWS_REGION, ECS_CLUSTER, ECS_SERVICE, ECS_TASK_FAMILY.
+name: 'Ch7 · Deploy to AWS ECS (later)'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - name: AWS login (OIDC, no access keys)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Current task definition
+        run: |
+          aws ecs describe-task-definition --task-definition "${{ vars.ECS_TASK_FAMILY }}" \
+            --query taskDefinition > task-definition.json
+      - name: New image in the task definition
+        id: task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: cookbook-app
+          image: ghcr.io/${{ github.repository_owner }}/cookbook-app:latest
+      - name: Deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task.outputs.task-definition }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          service: ${{ vars.ECS_SERVICE }}
+          wait-for-service-stability: true

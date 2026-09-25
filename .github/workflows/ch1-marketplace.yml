@@ -1,0 +1,54 @@
+# Ch1 "The GitHub marketplace": use ready-made actions (pinned to a major version).
+name: 'Ch1 · Marketplace actions'
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/ch1-marketplace.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  marketplace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Repository facts with actions/github-script
+        id: facts
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { data: repo } = await github.rest.repos.get(context.repo);
+            const facts = {
+              name: repo.full_name,
+              visibility: repo.visibility,
+              default_branch: repo.default_branch,
+              stars: repo.stargazers_count,
+              open_issues: repo.open_issues_count,
+            };
+            core.setOutput('visibility', repo.visibility);
+            await core.summary.addHeading('Repository facts', 3)
+              .addTable([[{data: 'Key', header: true}, {data: 'Value', header: true}],
+                         ...Object.entries(facts).map(([k, v]) => [k, String(v)])])
+              .write();
+            return facts;
+
+      - name: Use the output
+        run: echo "This repository is ${{ steps.facts.outputs.visibility }}"
+
+      - name: Package the sample library
+        working-directory: src
+        run: npm pack
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sample-package
+          path: src/*.tgz
+          retention-days: 3
