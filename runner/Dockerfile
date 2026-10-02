@@ -1,5 +1,5 @@
 # Ch4 self-hosted runner in a container (ephemeral: one job, then it exits and is replaced).
-FROM ubuntu:24.04
+FROM ubuntu:25.10
 
 ARG RUNNER_VERSION=2.337.0
 ARG TARGETARCH=amd64
